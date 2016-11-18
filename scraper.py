@@ -1,43 +1,49 @@
 import os
-
 from lxml import html
 import requests
-import country
-import rate
 import re
-import json
+from country import Country
 
-url = 'https://www.federalreserve.gov/releases/h10/hist/'
-countries = []
+class Scraper:
+    URL = 'https://www.federalreserve.gov/releases/h10/hist/'
+    TABLE_ROW = '//table[@class="statistics"]/tr'
+    COUNTRY_NAME = '*/a[@href]/text()'
+    UNIT_NAME = 'td/text()'
+    LINK = '*/a/@href'
+    DATE = '*[@id="r1"]/text()'
+    VALUE = 'td[@headers="a2 a1 r1"]/text()'
+
+    def __init__(self, output):
+        self.output = output
 
 
-page = requests.get(url)
-tree = html.fromstring(page.content)
+    def scrape(self):
+        page = requests.get(Scraper.URL)
+        tree = html.fromstring(page.content)
+        for elem in tree.xpath(Scraper.TABLE_ROW):
+            c = Country(elem.xpath(Scraper.COUNTRY_NAME)[0], elem.xpath(Scraper.UNIT_NAME)[0], elem.xpath(Scraper.LINK)[0])
+            self.populateRatingsForCountry(c)
+            self.writeToFile(c)
 
-for elem in tree.xpath('//table[@class="statistics"]/tr'):
-    countries.append(country.Country(elem.xpath('th/a[@href]/text()')[0], elem.xpath('td/text()')[0], elem.xpath('th/a/@href')[0]))
 
-for c in countries:
-    page = requests.get(url + c.link)
-    tree = html.fromstring(page.content)
-    rates = []
-    for elem in tree.xpath('//table[@class="statistics"]/tr'):
-        d = re.findall("(\d+-[a-zA-Z]{3}-\d\d)", elem.xpath('th[@id="r1"]/text()')[0])[0]
-        v = re.findall("\d+\.\d+|[a-zA-Z]+", elem.xpath('td[@headers="a2 a1 r1"]/text()')[0])[0]
-        rates.append(rate.Rate(d, v))
-    c.setRates(rates)
+    def populateRatingsForCountry(self, c):
+        print "Populating %s" % c.name
+        page = requests.get(Scraper.URL + c.link)
+        tree = html.fromstring(page.content)
+        for elem in tree.xpath(Scraper.TABLE_ROW):
+            d = re.search("(\d+-[a-zA-Z]{3}-\d\d)", elem.xpath(Scraper.DATE)[0]).group()
+            v = re.search("\d+\.\d+|[a-zA-Z]+", elem.xpath(Scraper.VALUE)[0]).group()
+            c.addRate(d, v)
 
-def encode_rate(obj):
-    if isinstance(obj, rate.Rate):
-        return obj.__dict__
-    return obj
 
-if not os.path.exists("output"):
-    os.makedirs("output")
+    def writeToFile(self, c):
+        if not os.path.exists(self.output):
+            os.makedirs(self.output)
+        filename = self.output + c.name + ".json"
+        f = open(filename, 'w')
+        print >> f, c.toJsonObject()
+        f.close()
 
-for c in countries:
-    s = json.dumps(c.__dict__, default=encode_rate)
-    filename = "output/" +c.name + ".json"
-    f = open(filename, 'w')
-    print >> f, s
-    f.close()
+if __name__ == "__main__":
+    scraper = Scraper("output/")
+    scraper.scrape()

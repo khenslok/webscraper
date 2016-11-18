@@ -6,3 +6,8 @@ class Rate:
 
     def displayRate(self):
         print self.date, " ", self.value
+
+    def encode_rate(obj):
+        if isinstance(obj, Rate):
+            return obj.__dict__
+        return obj
