@@ -3,7 +3,7 @@ import json
 
 
 class Country:
-    'Common base class for all countries'
+    'Common base class for country'
 
     def __init__(self, name, unit, link):
         self.name = name
